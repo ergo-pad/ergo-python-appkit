@@ -14,7 +14,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/ergo-pad/ergo-python-appkit",
-    package_data={'ergo_python_appkit': ['*.jar']},
+    package_data={'ergo_python_appkit': ['jars/*.jar']},
     include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
