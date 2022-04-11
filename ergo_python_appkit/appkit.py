@@ -1,7 +1,6 @@
 import json
 import typing
 
-from config import Config, Network
 import jpype
 import jpype.imports
 from jpype.types import *
@@ -33,18 +32,14 @@ from java.math import BigInteger
 from java.lang import NullPointerException
 import base64
 
-DEBUG = True # CFG.DEBUG
 
 #region LOGGING
 import logging
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
 
 import inspect
 myself = lambda: inspect.stack()[1][3]
 #endregion LOGGING
 
-CFG = Config[Network]
 
 class ErgoException(Exception):
     pass
@@ -57,10 +52,10 @@ class ErgoValueT(Enum):
 
 class ErgoAppKit:
     
-    def __init__(self,nodeUrl: str, networkType: str, explorerUrl: str):
+    def __init__(self,nodeUrl: str, networkType: str, explorerUrl: str, nodeApiKey: str = ""):
         self._nodeUrl = nodeUrl
         self._networkType = ErgoAppKit.NetworkType(networkType)
-        self._client = ApiClient(self._nodeUrl, "ApiKeyAuth", CFG.ergopadApiKey)
+        self._client = ApiClient(self._nodeUrl, "ApiKeyAuth", nodeApiKey)
         self._explorerUrl = explorerUrl.replace("/api/v1","")
         if self._explorerUrl!="":
             self._explorer = ExplorerApiClient(self._explorerUrl)
