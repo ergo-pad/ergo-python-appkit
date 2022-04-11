@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='ergo_python_appkit',  
-    version='0.0.1',
+    version='0.0.2',
     packages=['ergo_python_appkit'] ,
     author="Robert Pieter van Leeuwen",
     author_email="luivatra@gmail.com",
