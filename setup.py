@@ -1,8 +1,14 @@
+from pathlib import Path
 import setuptools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+def glob_fix(package_name, glob):
+    # this assumes setup.py lives in the folder that contains the package
+    package_path = Path(f'./{package_name}').resolve()
+    return [str(path.relative_to(package_path)) 
+            for path in package_path.glob(glob)]
 
 setuptools.setup(
     name='ergo_python_appkit',  
@@ -14,7 +20,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/ergo-pad/ergo-python-appkit",
-    package_data={'ergo_python_appkit': ['jars/*.jar','typings/*']},
+    package_data={'ergo_python_appkit': ['jars/*.jar',*glob_fix('my_package', 'typings/**/*')]},
     include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
