@@ -119,7 +119,7 @@ class ErgoAppKit:
             tts.append(ErgoToken(entry,map[entry]))
         return tts
 
-    def boxesToSpend(self, addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
+    def boxesToSpendFromList(self, addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
         ctx = self.getBlockChainContext()
         tts = self.mapToErgoTokenList(tokensToSpend)
         nergLeft = nergToSpend
