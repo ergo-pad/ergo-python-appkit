@@ -133,7 +133,7 @@ class ErgoAppKit:
                     err = '\n'.join([err,stackTraceElement.toString()])
                 err = '\n'.join([err,str(e.getMessage())])
                 logging.info(err)
-            result.append(list(coveringBoxes.getBoxes()))
+            result = result + list(coveringBoxes.getBoxes())
             if coveringBoxes.isCovered():
                 return result
             else:
