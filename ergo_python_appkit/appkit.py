@@ -134,7 +134,7 @@ class ErgoAppKit:
                 err = '\n'.join([err,str(e.getMessage())])
                 logging.info(err)
             result = result + list(coveringBoxes.getBoxes())
-            if coveringBoxes.isCovered():
+            if self.boxesCovered(result,nergToSpend,tokensToSpend):
                 return result
             else:
                 balance = self.getBalance(result)
@@ -158,7 +158,7 @@ class ErgoAppKit:
                 err = '\n'.join([err,stackTraceElement.toString()])
             err = '\n'.join([err,str(e.getMessage())])
             logging.info(err)
-        if coveringBoxes.isCovered():
+        if self.boxesCovered(coveringBoxes.getBoxes(),nergToSpend,tokensToSpend):
             return coveringBoxes.getBoxes()
         else:
             return None
