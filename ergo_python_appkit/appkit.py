@@ -119,6 +119,34 @@ class ErgoAppKit:
             tts.append(ErgoToken(entry,map[entry]))
         return tts
 
+    def boxesToSpend(self, addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
+        ctx = self.getBlockChainContext()
+        tts = self.mapToErgoTokenList(tokensToSpend)
+        nergLeft = nergToSpend
+        result = []
+        for address in addresses:
+            try:
+                coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergLeft,java.util.ArrayList(tts))
+            except NullPointerException as e:
+                err = ""
+                for stackTraceElement in e.getStackTrace():
+                    err = '\n'.join([err,stackTraceElement.toString()])
+                err = '\n'.join([err,str(e.getMessage())])
+                logging.info(err)
+            result.append(list(coveringBoxes.getBoxes()))
+            if coveringBoxes.isCovered():
+                return coveringBoxes.getBoxes()
+            else:
+                balance = self.getBalance(result)
+                nergLeft = nergToSpend - balance["erg"]
+                tokensLeft = {}         
+                for token in list(tokensToSpend.keys()):
+                    if balance.get(token,0) < tokensToSpend[token]:
+                        tokensLeft[token] = tokensToSpend[token] - balance.get(token,0)
+                tts = self.mapToErgoTokenList(tokensLeft)
+
+        return None
+
     def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
         ctx = self.getBlockChainContext()
         tts = self.mapToErgoTokenList(tokensToSpend)
