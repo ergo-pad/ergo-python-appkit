@@ -135,7 +135,7 @@ class ErgoAppKit:
                 logging.info(err)
             result.append(list(coveringBoxes.getBoxes()))
             if coveringBoxes.isCovered():
-                return coveringBoxes.getBoxes()
+                return result
             else:
                 balance = self.getBalance(result)
                 nergLeft = nergToSpend - balance["erg"]
