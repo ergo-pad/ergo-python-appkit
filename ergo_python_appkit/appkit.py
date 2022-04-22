@@ -305,7 +305,7 @@ class ErgoAppKit:
             result = None
             try:
                 result = prover.sign(self._unsignedTx)
-            except InterpreterException as e:
+            except Exception as e:
                 raise e
             return result
 
