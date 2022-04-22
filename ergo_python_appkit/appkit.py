@@ -2,6 +2,8 @@ import json
 from os import times
 import typing
 
+from java.lang.reflect import UndeclaredThrowableException
+
 import jpype
 import jpype.imports
 from jpype.types import *
@@ -302,15 +304,13 @@ class ErgoAppKit:
         @JOverride
         def apply(self, ctx: BlockchainContextImpl) -> SignedTransaction:
             prover = ctx.newProverBuilder().build()
-            result = None
-            try:
-                result = prover.sign(self._unsignedTx)
-            except Exception as e:
-                raise e
-            return result
+            return prover.sign(self._unsignedTx)
 
     def signTransaction(self, unsignedTx: UnsignedTransaction) -> SignedTransaction:
-        return self._ergoClient.execute(ErgoAppKit.SignTransactionExecutor(unsignedTx))
+        try:
+            return self._ergoClient.execute(ErgoAppKit.SignTransactionExecutor(unsignedTx))
+        except UndeclaredThrowableException as e:
+            raise e.getCause()
 
     @JImplements(java.util.function.Function)
     class SendTransactionExecutor(object):
