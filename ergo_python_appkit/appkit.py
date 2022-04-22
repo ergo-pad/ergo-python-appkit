@@ -1,6 +1,8 @@
 import json
 import typing
 
+from retrofit2 import Response
+
 import jpype
 import jpype.imports
 from jpype.types import *
@@ -16,19 +18,15 @@ except OSError:
     print("JVM already running")
 
 
-from org.ergoplatform import DataInput, ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, BlockchainContext, BoxOperations, ConstantsBuilder, Eip4Token, ErgoClient, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction
-from org.ergoplatform.restapi.client import ApiClient, Asset, ErgoTransactionDataInput, ErgoTransactionOutput, ErgoTransactionUnsignedInput, Registers, TransactionSigningRequest, UnsignedErgoTransaction, WalletApi
+from org.ergoplatform import ErgoAddress, ErgoAddressEncoder
+from org.ergoplatform.appkit import Address, Eip4Token, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.restapi.client import ApiClient, ErgoTransactionOutput, ErgoTransactionUnsignedInput, TransactionSigningRequest, UnsignedErgoTransaction, UtxoApi, WalletApi
 from org.ergoplatform.explorer.client import ExplorerApiClient
-from org.ergoplatform.settings import ErgoAlgos
-from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, Eip4TokenBuilder, ErgoNodeFacade, ErgoTreeContract, ExplorerFacade, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
-from special.collection import Coll
+from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoTreeContract, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
 from sigmastate.Values import ErgoTree
 from sigmastate.serialization import ErgoTreeSerializer
-from scala import Byte as SByte, Long as SLong
 import java
 import scala
-from java.math import BigInteger
 from java.lang import NullPointerException
 import base64
 
@@ -55,7 +53,7 @@ class ErgoAppKit:
     def __init__(self,nodeUrl: str, networkType: str, explorerUrl: str, nodeApiKey: str = ""):
         self._nodeUrl = nodeUrl
         self._networkType = ErgoAppKit.NetworkType(networkType)
-        self._client = ApiClient(self._nodeUrl, "ApiKeyAuth", nodeApiKey)
+        self._client: ApiClient = ApiClient(self._nodeUrl, "ApiKeyAuth", nodeApiKey)
         self._explorerUrl = explorerUrl.replace("/api/v1","")
         if self._explorerUrl!="":
             self._explorer = ExplorerApiClient(self._explorerUrl)
@@ -95,11 +93,13 @@ class ErgoAppKit:
 
     def getBoxesById(self, boxIds: List[str]) -> List[InputBox]:
         ctx = self.getBlockChainContext()
-        _ok = self._client.getOkBuilder().build()
-        _retrofit = self._client.getAdapterBuilder().client(_ok).build()
+        api = self._client.createService(UtxoApi)
+        boxData: ErgoTransactionOutput = None
         res = []
         for id in boxIds:
-            boxData = ErgoNodeFacade.getBoxWithPoolById(_retrofit, id)
+            response: Response = api.getBoxWithPoolById(id).execute()
+            if response.isSuccessful():
+                boxData = response.body()
             if boxData is None:
                 raise ErgoClientException("Cannot load UTXO box " + id, None)
             res.append(InputBoxImpl(ctx, boxData))
