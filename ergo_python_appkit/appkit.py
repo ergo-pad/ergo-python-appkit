@@ -1,8 +1,6 @@
 import json
 import typing
 
-from retrofit2 import Response
-
 import jpype
 import jpype.imports
 from jpype.types import *
@@ -25,6 +23,7 @@ from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoTreeContract, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
 from sigmastate.Values import ErgoTree
 from sigmastate.serialization import ErgoTreeSerializer
+from retrofit2 import Response
 import java
 import scala
 from java.lang import NullPointerException
