@@ -2,8 +2,6 @@ import json
 from os import times
 import typing
 
-from java.lang.reflect import UndeclaredThrowableException
-
 import jpype
 import jpype.imports
 from jpype.types import *
@@ -25,6 +23,7 @@ from org.ergoplatform.restapi.client import ApiClient, ErgoTransactionOutput, Er
 from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoTreeContract, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
 from sigmastate.Values import ErgoTree
+from java.lang.reflect import UndeclaredThrowableException
 from sigmastate.serialization import ErgoTreeSerializer
 from sigmastate.lang.exceptions import InterpreterException
 from retrofit2 import Response
