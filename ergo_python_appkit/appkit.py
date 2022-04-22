@@ -24,6 +24,7 @@ from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoTreeContract, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
 from sigmastate.Values import ErgoTree
 from sigmastate.serialization import ErgoTreeSerializer
+from sigmastate.lang.exceptions import InterpreterException
 from retrofit2 import Response
 import java
 import scala
@@ -301,7 +302,12 @@ class ErgoAppKit:
         @JOverride
         def apply(self, ctx: BlockchainContextImpl) -> SignedTransaction:
             prover = ctx.newProverBuilder().build()
-            return prover.sign(self._unsignedTx)
+            result = None
+            try:
+                result = prover.sign(self._unsignedTx)
+            except InterpreterException as e:
+                raise e
+            return result
 
     def signTransaction(self, unsignedTx: UnsignedTransaction) -> SignedTransaction:
         return self._ergoClient.execute(ErgoAppKit.SignTransactionExecutor(unsignedTx))
