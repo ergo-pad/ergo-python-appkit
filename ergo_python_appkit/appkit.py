@@ -1,4 +1,5 @@
 import json
+from os import times
 import typing
 
 import jpype
@@ -17,7 +18,7 @@ except OSError:
 
 
 from org.ergoplatform import ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, Eip4Token, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.appkit import Address, Eip4Token, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction
 from org.ergoplatform.restapi.client import ApiClient, ErgoTransactionOutput, ErgoTransactionUnsignedInput, TransactionSigningRequest, UnsignedErgoTransaction, UtxoApi, WalletApi
 from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoTreeContract, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
@@ -54,6 +55,7 @@ class ErgoAppKit:
         self._networkType = ErgoAppKit.NetworkType(networkType)
         self._client: ApiClient = ApiClient(self._nodeUrl, "ApiKeyAuth", nodeApiKey)
         self._explorerUrl = explorerUrl.replace("/api/v1","")
+        self._ergoClient = RestApiErgoClient.create(nodeUrl,self._networkType,nodeApiKey,self._explorerUrl)
         if self._explorerUrl!="":
             self._explorer = ExplorerApiClient(self._explorerUrl)
         else:
@@ -62,9 +64,6 @@ class ErgoAppKit:
 
     def compileErgoScript(self, ergoScript: str, constants: Dict[str,typing.Any] = {}) -> ErgoTree:
         return JavaHelpers.compile(constants,ergoScript,self._networkType.networkPrefix)
-
-    def getBlockChainContext(self) -> BlockchainContextImpl:
-        return BlockchainContextBuilderImpl(self._client, self._explorer, self._networkType).build()
 
     def tree2Address(self, ergoTree):
         return self._addrEnc.fromProposition(ergoTree).get().toString()
@@ -75,94 +74,153 @@ class ErgoAppKit:
         else:
             return NetworkType.MAINNET
 
+    @JImplements(java.util.function.Function)
+    class BuildOutBoxExecutor(object):
+
+        def __init__(self, value: int, tokens: Dict[str,int], registers, contract):
+            self._value = value
+            self._tokens = tokens
+            self._registers = registers
+            self._contract = contract
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> OutBox:
+            tb = ctx.newTxBuilder()
+            ergoTokens = []
+            tb = tb.outBoxBuilder().contract(self._contract).value(self._value)
+            if self._tokens is not None:
+                for token in self._tokens.keys():
+                    ergoTokens.append(ErgoToken(token,self._tokens[token]))
+                tb = tb.tokens(ergoTokens)
+
+            if self._registers is not None:
+                tb = tb.registers(self._registers)
+
+            return tb.build()
+
     def buildOutBox(self,value: int, tokens: Dict[str,int], registers, contract) -> OutBox:
-        ctx = self.getBlockChainContext()
-        tb = ctx.newTxBuilder()
-        ergoTokens = []
-        tb = tb.outBoxBuilder().contract(contract).value(value)
-        if tokens is not None:
-            for token in tokens.keys():
-                ergoTokens.append(ErgoToken(token,tokens[token]))
-            tb = tb.tokens(ergoTokens)
+        return self._ergoClient.execute(ErgoAppKit.BuildOutBoxExecutor(value,tokens,registers,contract))
 
-        if registers is not None:
-            tb = tb.registers(registers)
+    @JImplements(java.util.function.Function)
+    class GetBoxesByIdExecutor(object):
 
-        return tb.build()
+        def __init__(self, boxIds: List[str], api: UtxoApi):
+            self._boxIds = boxIds
+            self._api = api
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> List[InputBox]:
+            boxData: ErgoTransactionOutput = None
+            res = []
+            for id in self._boxIds:
+                response: Response = self._api.getBoxWithPoolById(id).execute()
+                if response.isSuccessful():
+                    boxData = response.body()
+                if boxData is None:
+                    raise ErgoClientException("Cannot load UTXO box " + id, None)
+                res.append(InputBoxImpl(ctx, boxData))
+            return res
 
     def getBoxesById(self, boxIds: List[str]) -> List[InputBox]:
-        ctx = self.getBlockChainContext()
         api = self._client.createService(UtxoApi)
-        boxData: ErgoTransactionOutput = None
-        res = []
-        for id in boxIds:
-            response: Response = api.getBoxWithPoolById(id).execute()
-            if response.isSuccessful():
-                boxData = response.body()
-            if boxData is None:
-                raise ErgoClientException("Cannot load UTXO box " + id, None)
-            res.append(InputBoxImpl(ctx, boxData))
-        return res
+        return self._ergoClient.execute(ErgoAppKit.GetBoxesByIdExecutor(boxIds,api))
     
+    @JImplements(java.util.function.Function)
+    class MintTokenExecutor(object):
+
+        def __init__(self, value: int, tokenId: str, tokenName: str, tokenDesc: str, mintAmount: int, decimals: int, contract: ErgoContract):
+            self._value = value
+            self._tokenId = tokenId
+            self._tokenName = tokenName
+            self._tokenDesc = tokenDesc
+            self._mintAmount = mintAmount
+            self._decimals = decimals
+            self._contract = contract
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> OutBox:
+            tb = ctx.newTxBuilder()
+            return tb.outBoxBuilder().contract(self._contract).value(self._value).mintToken(Eip4Token(self._tokenId,self._mintAmount,self._tokenName,self._tokenDesc,self._decimals)).build()
+
     def mintToken(self, value: int, tokenId: str, tokenName: str, tokenDesc: str, mintAmount: int, decimals: int, contract: ErgoContract) -> OutBox:
-        ctx = self.getBlockChainContext()
-        tb = ctx.newTxBuilder()
-        return tb.outBoxBuilder().contract(contract).value(value).mintToken(Eip4Token(tokenId,mintAmount,tokenName,tokenDesc,decimals)).build()
+        return self._ergoClient.execute(ErgoAppKit.MintTokenExecutor(value,tokenId,tokenName,tokenDesc,mintAmount,decimals,contract))
 
-    def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract) -> InputBox:
-        return self.buildOutBox(value, tokens, registers, contract).convertToInputWith("ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d", 0)
+    def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract, withTxId: str = "ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d") -> InputBox:
+        return self.buildOutBox(value, tokens, registers, contract).convertToInputWith(withTxId, 0)
 
-    def mapToErgoTokenList(self, map: Dict[str,int]) -> List[ErgoToken]:
+    def mapToErgoTokenList(map: Dict[str,int]) -> List[ErgoToken]:
         tts = []
         for entry in map:
             tts.append(ErgoToken(entry,map[entry]))
         return tts
 
+    @JImplements(java.util.function.Function)
+    class BoxesToSpendFromListExecutor(object):
+
+        def __init__(self,   addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}):
+            self._addresses = addresses
+            self._nergToSpend = nergToSpend
+            self._tokensToSpend = tokensToSpend
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> List[InputBox]:
+            tts = ErgoAppKit.mapToErgoTokenList(self._tokensToSpend)
+            nergLeft = self._nergToSpend
+            result = []
+            for address in self._addresses:
+                try:
+                    coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergLeft,java.util.ArrayList(tts))
+                except NullPointerException as e:
+                    err = ""
+                    for stackTraceElement in e.getStackTrace():
+                        err = '\n'.join([err,stackTraceElement.toString()])
+                    err = '\n'.join([err,str(e.getMessage())])
+                    logging.info(err)
+                result = result + list(coveringBoxes.getBoxes())
+                if ErgoAppKit.boxesCovered(result,self._nergToSpend,self._tokensToSpend):
+                    return result
+                else:
+                    balance = ErgoAppKit.getBalance(result)
+                    nergLeft = self._nergToSpend - balance["erg"]
+                    tokensLeft = {}         
+                    for token in list(self._tokensToSpend.keys()):
+                        if balance.get(token,0) < self._tokensToSpend[token]:
+                            tokensLeft[token] = self._tokensToSpend[token] - balance.get(token,0)
+                    tts = ErgoAppKit.mapToErgoTokenList(tokensLeft)
+
+            return None
+
     def boxesToSpendFromList(self, addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
-        ctx = self.getBlockChainContext()
-        tts = self.mapToErgoTokenList(tokensToSpend)
-        nergLeft = nergToSpend
-        result = []
-        for address in addresses:
+        return self._ergoClient.execute(ErgoAppKit.BoxesToSpendFromListExecutor(addresses,nergToSpend,tokensToSpend))
+
+    @JImplements(java.util.function.Function)
+    class BoxesToSpendExecutor(object):
+
+        def __init__(self,   address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}):
+            self._address = address
+            self._nergToSpend = nergToSpend
+            self._tokensToSpend = tokensToSpend
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> List[InputBox]:
+            tts = ErgoAppKit.mapToErgoTokenList(self._tokensToSpend)
             try:
-                coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergLeft,java.util.ArrayList(tts))
+                coveringBoxes = ctx.getCoveringBoxesFor(Address.create(self._address),self._nergToSpend,java.util.ArrayList(tts))
             except NullPointerException as e:
                 err = ""
                 for stackTraceElement in e.getStackTrace():
                     err = '\n'.join([err,stackTraceElement.toString()])
                 err = '\n'.join([err,str(e.getMessage())])
                 logging.info(err)
-            result = result + list(coveringBoxes.getBoxes())
-            if self.boxesCovered(result,nergToSpend,tokensToSpend):
-                return result
+            if ErgoAppKit.boxesCovered(coveringBoxes.getBoxes(),self._nergToSpend,self._tokensToSpend):
+                return coveringBoxes.getBoxes()
             else:
-                balance = self.getBalance(result)
-                nergLeft = nergToSpend - balance["erg"]
-                tokensLeft = {}         
-                for token in list(tokensToSpend.keys()):
-                    if balance.get(token,0) < tokensToSpend[token]:
-                        tokensLeft[token] = tokensToSpend[token] - balance.get(token,0)
-                tts = self.mapToErgoTokenList(tokensLeft)
-
-        return None
+                return None
 
     def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
-        ctx = self.getBlockChainContext()
-        tts = self.mapToErgoTokenList(tokensToSpend)
-        try:
-            coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergToSpend,java.util.ArrayList(tts))
-        except NullPointerException as e:
-            err = ""
-            for stackTraceElement in e.getStackTrace():
-                err = '\n'.join([err,stackTraceElement.toString()])
-            err = '\n'.join([err,str(e.getMessage())])
-            logging.info(err)
-        if self.boxesCovered(coveringBoxes.getBoxes(),nergToSpend,tokensToSpend):
-            return coveringBoxes.getBoxes()
-        else:
-            return None
+        return self._ergoClient.execute(ErgoAppKit.BoxesToSpendExecutor(address,nergToSpend,tokensToSpend))
 
-    def ergoValue(self, value, t: ErgoValueT):
+    def ergoValue(value, t: ErgoValueT):
         if t == ErgoValueT.Long:
             res = ErgoValue.of(JLong(value))
             return res
@@ -191,80 +249,141 @@ class ErgoAppKit:
         treeSerializer = ErgoTreeSerializer()
         return self._addrEnc.fromProposition(treeSerializer.deserializeErgoTree(bytes)).get().script()
 
+    @JImplements(java.util.function.Function)
+    class PreHeaderExecutor(object):
+
+        def __init__(self,  timestamp: int = None):
+            self._timestamp = timestamp
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> PreHeader:
+            phb = ctx.createPreHeader()
+            if self._timestamp is not None:
+                phb = phb.timestamp(JLong(self._timestamp))
+            return phb.build()
+
     def preHeader(self, timestamp: int = None) -> PreHeader:
-        ctx = self.getBlockChainContext()
-        phb = ctx.createPreHeader()
-        if timestamp is not None:
-            phb = phb.timestamp(JLong(timestamp))
-        return phb.build()
+        return self._ergoClient.execute(ErgoAppKit.PreHeaderExecutor(timestamp))
+
+    @JImplements(java.util.function.Function)
+    class BuildUnsignedTransactionExecutor(object):
+
+        def __init__(self,  inputs: List[InputBox], outputs: List[OutBox], fee: int, sendChangeTo: ErgoAddress, tokensToBurn: Dict[str,int] = None, dataInputs: List[InputBox] = None, preHeader: PreHeader = None):
+            self._inputs = inputs
+            self._outputs = outputs
+            self._fee = fee
+            self._sendChangeTo = sendChangeTo
+            self._tokensToBurn = tokensToBurn
+            self._dataInputs = dataInputs
+            self._preHeader = preHeader
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> UnsignedTransaction:
+            tb = ctx.newTxBuilder()
+            if self._preHeader is not None:
+                tb = tb.preHeader(self._preHeader)
+            if self._dataInputs is not None:
+                tb = tb.withDataInputs(java.util.ArrayList(self._dataInputs))
+            if self._tokensToBurn is not None:
+                tb = tb.tokensToBurn(ErgoAppKit.mapToErgoTokenList(self._tokensToBurn))
+            tb = tb.boxesToSpend(java.util.ArrayList(self._inputs)).fee(self._fee).outputs(self._outputs).sendChangeTo(self._sendChangeTo)
+            return tb.build()
 
     def buildUnsignedTransaction(self, inputs: List[InputBox], outputs: List[OutBox], fee: int, sendChangeTo: ErgoAddress, tokensToBurn: Dict[str,int] = None, dataInputs: List[InputBox] = None, preHeader: PreHeader = None) -> UnsignedTransaction:
-        ctx = self.getBlockChainContext()
-        tb = ctx.newTxBuilder()
-        if preHeader is not None:
-            tb = tb.preHeader(preHeader)
-        if dataInputs is not None:
-            tb = tb.withDataInputs(java.util.ArrayList(dataInputs))
-        if tokensToBurn is not None:
-            tb = tb.tokensToBurn(self.mapToErgoTokenList(tokensToBurn))
-        tb = tb.boxesToSpend(java.util.ArrayList(inputs)).fee(fee).outputs(outputs).sendChangeTo(sendChangeTo)
-        return tb.build()
+        return self._ergoClient.execute(ErgoAppKit.BuildUnsignedTransactionExecutor(inputs,outputs,fee,sendChangeTo,tokensToBurn,dataInputs,preHeader))
+
+    @JImplements(java.util.function.Function)
+    class SignTransactionExecutor(object):
+
+        def __init__(self, unsignedTx: UnsignedTransaction):
+            self._unsignedTx = unsignedTx
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> SignedTransaction:
+            prover = ctx.newProverBuilder().build()
+            return prover.sign(self._unsignedTx)
 
     def signTransaction(self, unsignedTx: UnsignedTransaction) -> SignedTransaction:
-        ctx = self.getBlockChainContext()
-        prover = ctx.newProverBuilder().build()
-        return prover.sign(unsignedTx)
+        return self._ergoClient.execute(ErgoAppKit.SignTransactionExecutor(unsignedTx))
+
+    @JImplements(java.util.function.Function)
+    class SendTransactionExecutor(object):
+
+        def __init__(self, signedTx: SignedTransaction):
+            self._signedTx = signedTx
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> str:
+            return ctx.sendTransaction(self._signedTx)
 
     def sendTransaction(self, signedTx: SignedTransaction) -> str:
-        ctx = self.getBlockChainContext()
-        return ctx.sendTransaction(signedTx)
+        return self._ergoClient(ErgoAppKit.SendTransactionExecutor(signedTx))
+
+    @JImplements(java.util.function.Function)
+    class SignTransactionWithNodeExecutor(object):
+
+        def __init__(self, unsignedTx: UnsignedTransactionImpl):
+            self._unsignedTx = unsignedTx
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> SignedTransaction:
+            signRequest = TransactionSigningRequest()
+            unsignedErgoTx = UnsignedErgoTransaction()
+            unsignedErgoLikeTx = self._unsignedTx.getTx()
+            for i in range(int(unsignedErgoLikeTx.inputs().length())):
+                input = unsignedErgoLikeTx.inputs().apply(JInt(i))
+                unsignedInput = ErgoTransactionUnsignedInput()
+                unsignedInput.setBoxId(self._unsignedTx.getInputs()[i].getId().toString())
+                unsignedInput.setExtension(scala.collection.JavaConversions.mapAsJavaMap(input.extension().values()))
+                unsignedErgoTx = unsignedErgoTx.addInputsItem(unsignedInput)
+            if unsignedErgoLikeTx.dataInputs().length() > 0:
+                unsignedErgoTx.setDataInputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionDataInput())).to(unsignedErgoLikeTx.dataInputs()))
+            unsignedErgoTx.setOutputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionOutput())).to(unsignedErgoLikeTx.outputs()))
+            signRequest.setTx(unsignedErgoTx)
+            api = self._client.createService(WalletApi)
+            response = api.walletTransactionSign(signRequest).execute()
+            if response.isSuccessful():
+                ergoTx = response.body()
+                tx = ScalaBridge.isoErgoTransaction().to(ergoTx)
+                signedTx = SignedTransactionImpl(ctx,tx,0)
+                return signedTx
+            else:
+                error = json.loads(response.errorBody().string())
+                raise ErgoException(f'{error["reason"]}: {error["detail"]}')
 
     def signTransactionWithNode(self, unsignedTx: UnsignedTransactionImpl) -> SignedTransaction:
-        signRequest = TransactionSigningRequest()
-        unsignedErgoTx = UnsignedErgoTransaction()
-        unsignedErgoLikeTx = unsignedTx.getTx()
-        for i in range(int(unsignedErgoLikeTx.inputs().length())):
-            input = unsignedErgoLikeTx.inputs().apply(JInt(i))
-            unsignedInput = ErgoTransactionUnsignedInput()
-            unsignedInput.setBoxId(unsignedTx.getInputs()[i].getId().toString())
-            unsignedInput.setExtension(scala.collection.JavaConversions.mapAsJavaMap(input.extension().values()))
-            unsignedErgoTx = unsignedErgoTx.addInputsItem(unsignedInput)
-        if unsignedErgoLikeTx.dataInputs().length() > 0:
-            unsignedErgoTx.setDataInputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionDataInput())).to(unsignedErgoLikeTx.dataInputs()))
-        unsignedErgoTx.setOutputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionOutput())).to(unsignedErgoLikeTx.outputs()))
-        signRequest.setTx(unsignedErgoTx)
-        api = self._client.createService(WalletApi)
-        response = api.walletTransactionSign(signRequest).execute()
-        if response.isSuccessful():
-            ergoTx = response.body()
-            tx = ScalaBridge.isoErgoTransaction().to(ergoTx)
-            signedTx = SignedTransactionImpl(self.getBlockChainContext(),tx,0)
-            return signedTx
-        else:
-            error = json.loads(response.errorBody().string())
-            raise ErgoException(f'{error["reason"]}: {error["detail"]}')
+        return self._ergoClient.execute(ErgoAppKit.SignTransactionWithNodeExecutor(unsignedTx))
+
+    @JImplements(java.util.function.Function)
+    class GetUnspentBoxesExecutor(object):
+
+        def __init__(self, address: str):
+            self._address = address
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> List[InputBox]:
+            addr = Address.create(self._address)
+            offset = 0
+            limit = 100
+            result = []
+            pageResult = ctx.getUnspentBoxesFor(addr,offset,limit)
+            while len(pageResult) > 0:
+                result = result + list(pageResult)
+                offset += limit
+                pageResult = ctx.getUnspentBoxesFor(addr,offset,limit)
+            return result
 
     def getUnspentBoxes(self, address: str) -> List[InputBox]:
-        ctx = self.getBlockChainContext()
-        addr = Address.create(address)
-        offset = 0
-        limit = 100
-        result = []
-        pageResult = ctx.getUnspentBoxesFor(addr,offset,limit)
-        while len(pageResult) > 0:
-            result = result + list(pageResult)
-            offset += limit
-            pageResult = ctx.getUnspentBoxesFor(addr,offset,limit)
-        return result
+        return self._ergoClient.execute(ErgoAppKit.GetUnspentBoxesExecutor(address))
 
-    def deserializeLongArray(self,hex: str) -> List[int]:
+    def deserializeLongArray(hex: str) -> List[int]:
         ergoValue = ErgoValue.fromHex(hex)
         res = []
         for val in ergoValue.getValue().toArray():
             res.append(val)
         return res
 
-    def getBalance(self, boxes: List[InputBox]) -> Dict[str,int]:
+    def getBalance(boxes: List[InputBox]) -> Dict[str,int]:
         res = {"erg":0}
         for box in boxes:
             res["erg"] += box.getValue()
@@ -275,8 +394,8 @@ class ErgoAppKit:
                     res[token.getId().toString()] += token.getValue()      
         return res
 
-    def boxesCovered(self, inputs: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> bool:
-        balance = self.getBalance(inputs)
+    def boxesCovered(inputs: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> bool:
+        balance = ErgoAppKit.getBalance(inputs)
         if balance["erg"] < nErgRequired:
             return False
         for token in list(tokensToSpend.keys()):
@@ -284,15 +403,15 @@ class ErgoAppKit:
                 return False
         return True
 
-    def cutOffExcessUTXOs(self, utxos: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> List[InputBox]:
+    def cutOffExcessUTXOs(utxos: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> List[InputBox]:
         result = []
         for utxo in utxos:
             result.append(utxo)
-            if self.boxesCovered(result,nErgRequired,tokensToSpend):
+            if ErgoAppKit.boxesCovered(result,nErgRequired,tokensToSpend):
                 return result
         return result
 
-    def unsignedTxToJson(self, unsignedTx: UnsignedTransactionImpl) -> str:
+    def unsignedTxToJson(unsignedTx: UnsignedTransactionImpl) -> str:
         inputs = []
         for i in unsignedTx.getInputs():
             j = json.loads(i.toJson(False))
@@ -333,17 +452,26 @@ class ErgoAppKit:
             'outputs': outputs
         }
 
+    @JImplements(java.util.function.Function)
+    class ReducedTxExecutor(object):
+
+        def __init__(self, unsignedTx: UnsignedTransactionImpl):
+            self._unsignedTx = unsignedTx
+
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> ReducedTransaction:
+            return ctx.newProverBuilder().build().reduce(self._unsignedTx,0)
+
     def reducedTx(self, unsignedTx: UnsignedTransactionImpl) -> ReducedTransaction:
-        ctx = self.getBlockChainContext()
-        return ctx.newProverBuilder().build().reduce(unsignedTx,0)
+        return self._ergoClient.execute(ErgoAppKit.ReducedTxExecutor(unsignedTx))
 
     def formErgoPaySigningRequest(
-        self,
         reducedTx: ReducedTransaction, 
         address: str = None, 
         message: str = None,
         messageSeverity: str = None,
         replyTo: str = None) -> str:
+
         result = {}
         result['reducedTx'] = base64.urlsafe_b64encode(reducedTx.toBytes()).decode()
         if address is not None: result['address'] = address
