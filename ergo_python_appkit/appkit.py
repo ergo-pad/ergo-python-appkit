@@ -70,12 +70,6 @@ class ErgoAppKit:
     def tree2Address(self, ergoTree):
         return self._addrEnc.fromProposition(ergoTree).get().toString()
 
-    def NetworkType(networkType: str):
-        if networkType.lower()=="testnet":
-            return NetworkType.TESTNET
-        else:
-            return NetworkType.MAINNET
-
     @JImplements(java.util.function.Function)
     class BuildOutBoxExecutor(object):
 
@@ -381,39 +375,40 @@ class ErgoAppKit:
     def getUnspentBoxes(self, address: str) -> List[InputBox]:
         return self._ergoClient.execute(ErgoAppKit.GetUnspentBoxesExecutor(address))
 
-    def deserializeLongArray(hex: str) -> List[int]:
-        ergoValue = ErgoValue.fromHex(hex)
-        res = []
-        for val in ergoValue.getValue().toArray():
-            res.append(val)
-        return res
+    @JImplements(java.util.function.Function)
+    class ReducedTxExecutor(object):
 
-    def getBalance(boxes: List[InputBox]) -> Dict[str,int]:
-        res = {"erg":0}
-        for box in boxes:
-            res["erg"] += box.getValue()
-            for token in box.getTokens():
-                if token.getId().toString() not in res.keys():
-                    res[token.getId().toString()] = token.getValue()
-                else:
-                    res[token.getId().toString()] += token.getValue()      
-        return res
+        def __init__(self, unsignedTx: UnsignedTransactionImpl):
+            self._unsignedTx = unsignedTx
 
-    def boxesCovered(inputs: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> bool:
-        balance = ErgoAppKit.getBalance(inputs)
-        if balance["erg"] < nErgRequired:
-            return False
-        for token in list(tokensToSpend.keys()):
-            if balance.get(token,0) < tokensToSpend[token]:
-                return False
-        return True
+        @JOverride
+        def apply(self, ctx: BlockchainContextImpl) -> ReducedTransaction:
+            return ctx.newProverBuilder().build().reduce(self._unsignedTx,0)
 
-    def cutOffExcessUTXOs(utxos: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> List[InputBox]:
-        result = []
-        for utxo in utxos:
-            result.append(utxo)
-            if ErgoAppKit.boxesCovered(result,nErgRequired,tokensToSpend):
-                return result
+    def reducedTx(self, unsignedTx: UnsignedTransactionImpl) -> ReducedTransaction:
+        return self._ergoClient.execute(ErgoAppKit.ReducedTxExecutor(unsignedTx))
+
+    #static functions
+    def NetworkType(networkType: str):
+        if networkType.lower()=="testnet":
+            return NetworkType.TESTNET
+        else:
+            return NetworkType.MAINNET
+
+    def formErgoPaySigningRequest(
+            reducedTx: ReducedTransaction, 
+            address: str = None, 
+            message: str = None,
+            messageSeverity: str = None,
+            replyTo: str = None
+        ) -> str:
+
+        result = {}
+        result['reducedTx'] = base64.urlsafe_b64encode(reducedTx.toBytes()).decode()
+        if address is not None: result['address'] = address
+        if message is not None: result['message'] = message
+        if messageSeverity is not None: result['messageSeverity'] = messageSeverity
+        if replyTo is not None: result['replyTo'] = replyTo
         return result
 
     def unsignedTxToJson(unsignedTx: UnsignedTransactionImpl) -> str:
@@ -457,34 +452,40 @@ class ErgoAppKit:
             'outputs': outputs
         }
 
-    @JImplements(java.util.function.Function)
-    class ReducedTxExecutor(object):
-
-        def __init__(self, unsignedTx: UnsignedTransactionImpl):
-            self._unsignedTx = unsignedTx
-
-        @JOverride
-        def apply(self, ctx: BlockchainContextImpl) -> ReducedTransaction:
-            return ctx.newProverBuilder().build().reduce(self._unsignedTx,0)
-
-    def reducedTx(self, unsignedTx: UnsignedTransactionImpl) -> ReducedTransaction:
-        return self._ergoClient.execute(ErgoAppKit.ReducedTxExecutor(unsignedTx))
-
-    def formErgoPaySigningRequest(
-        reducedTx: ReducedTransaction, 
-        address: str = None, 
-        message: str = None,
-        messageSeverity: str = None,
-        replyTo: str = None) -> str:
-
-        result = {}
-        result['reducedTx'] = base64.urlsafe_b64encode(reducedTx.toBytes()).decode()
-        if address is not None: result['address'] = address
-        if message is not None: result['message'] = message
-        if messageSeverity is not None: result['messageSeverity'] = messageSeverity
-        if replyTo is not None: result['replyTo'] = replyTo
+    def cutOffExcessUTXOs(utxos: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> List[InputBox]:
+        result = []
+        for utxo in utxos:
+            result.append(utxo)
+            if ErgoAppKit.boxesCovered(result,nErgRequired,tokensToSpend):
+                return result
         return result
 
+    def boxesCovered(inputs: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> bool:
+        balance = ErgoAppKit.getBalance(inputs)
+        if balance["erg"] < nErgRequired:
+            return False
+        for token in list(tokensToSpend.keys()):
+            if balance.get(token,0) < tokensToSpend[token]:
+                return False
+        return True
+
+    def deserializeLongArray(hex: str) -> List[int]:
+        ergoValue = ErgoValue.fromHex(hex)
+        res = []
+        for val in ergoValue.getValue().toArray():
+            res.append(val)
+        return res
+
+    def getBalance(boxes: List[InputBox]) -> Dict[str,int]:
+        res = {"erg":0}
+        for box in boxes:
+            res["erg"] += box.getValue()
+            for token in box.getTokens():
+                if token.getId().toString() not in res.keys():
+                    res[token.getId().toString()] = token.getValue()
+                else:
+                    res[token.getId().toString()] += token.getValue()      
+        return res
 
         
 
