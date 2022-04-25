@@ -115,11 +115,11 @@ class ErgoAppKit:
                 if boxData is None:
                     raise ErgoClientException("Cannot load UTXO box " + id, None)
                 res.append(InputBoxImpl(ctx, boxData))
-            return res
+            return java.util.ArrayList(res)
 
     def getBoxesById(self, boxIds: List[str]) -> List[InputBox]:
         api = self._client.createService(UtxoApi)
-        return self._ergoClient.execute(ErgoAppKit.GetBoxesByIdExecutor(boxIds,api))
+        return list(self._ergoClient.execute(ErgoAppKit.GetBoxesByIdExecutor(boxIds,api)))
     
     @JImplements(java.util.function.Function)
     class MintTokenExecutor(object):
@@ -143,12 +143,6 @@ class ErgoAppKit:
 
     def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract, withTxId: str = "ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d") -> InputBox:
         return self.buildOutBox(value, tokens, registers, contract).convertToInputWith(withTxId, 0)
-
-    def mapToErgoTokenList(map: Dict[str,int]) -> List[ErgoToken]:
-        tts = []
-        for entry in map:
-            tts.append(ErgoToken(entry,map[entry]))
-        return tts
 
     @JImplements(java.util.function.Function)
     class BoxesToSpendFromListExecutor(object):
@@ -187,7 +181,7 @@ class ErgoAppKit:
             return None
 
     def boxesToSpendFromList(self, addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
-        return self._ergoClient.execute(ErgoAppKit.BoxesToSpendFromListExecutor(addresses,nergToSpend,tokensToSpend))
+        return list(self._ergoClient.execute(ErgoAppKit.BoxesToSpendFromListExecutor(addresses,nergToSpend,tokensToSpend)))
 
     @JImplements(java.util.function.Function)
     class BoxesToSpendExecutor(object):
@@ -214,7 +208,7 @@ class ErgoAppKit:
                 return None
 
     def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
-        return self._ergoClient.execute(ErgoAppKit.BoxesToSpendExecutor(address,nergToSpend,tokensToSpend))
+        return list(self._ergoClient.execute(ErgoAppKit.BoxesToSpendExecutor(address,nergToSpend,tokensToSpend)))
 
     def ergoValue(value, t: ErgoValueT):
         if t == ErgoValueT.Long:
@@ -370,10 +364,10 @@ class ErgoAppKit:
                 result = result + list(pageResult)
                 offset += limit
                 pageResult = ctx.getUnspentBoxesFor(addr,offset,limit)
-            return result
+            return java.util.ArrayList(result)
 
     def getUnspentBoxes(self, address: str) -> List[InputBox]:
-        return self._ergoClient.execute(ErgoAppKit.GetUnspentBoxesExecutor(address))
+        return list(self._ergoClient.execute(ErgoAppKit.GetUnspentBoxesExecutor(address)))
 
     @JImplements(java.util.function.Function)
     class ReducedTxExecutor(object):
@@ -486,6 +480,12 @@ class ErgoAppKit:
                 else:
                     res[token.getId().toString()] += token.getValue()      
         return res
+
+    def mapToErgoTokenList(map: Dict[str,int]) -> List[ErgoToken]:
+        tts = []
+        for entry in map:
+            tts.append(ErgoToken(entry,map[entry]))
+        return tts
 
         
 
