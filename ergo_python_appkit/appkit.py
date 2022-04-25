@@ -310,7 +310,7 @@ class ErgoAppKit:
             return ctx.sendTransaction(self._signedTx)
 
     def sendTransaction(self, signedTx: SignedTransaction) -> str:
-        return self._ergoClient(ErgoAppKit.SendTransactionExecutor(signedTx))
+        return self._ergoClient.execute(ErgoAppKit.SendTransactionExecutor(signedTx))
 
     @JImplements(java.util.function.Function)
     class SignTransactionWithNodeExecutor(object):
