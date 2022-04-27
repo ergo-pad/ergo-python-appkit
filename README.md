@@ -9,7 +9,7 @@ pip install git+https://github.com/ergo-pad/ergo-python-appkit.git
 
 ## Usage
 The ergo appkit can be accessed by importing java classes AFTER importing the appkit, like this:
-```
+```python
 import ergo_python_appkit.appkit
 from org.ergoplatform.appkit import Address
 
@@ -21,7 +21,7 @@ print(myErgoAddress.toErgoContract().getErgoTree())
 There are also convenience methods created to allow for easier use from Python for appkit functionality that is used often.
 
 An example of a simple intra wallet transaction send from the nodes wallet:
-```
+```python
 from ergo_python_appkit.appkit import ErgoAppKit
 from org.ergoplatform.appkit import Address
 
