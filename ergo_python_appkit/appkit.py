@@ -168,7 +168,7 @@ class ErgoAppKit:
                     logging.info(err)
                 result = result + list(coveringBoxes.getBoxes())
                 if ErgoAppKit.boxesCovered(result,self._nergToSpend,self._tokensToSpend):
-                    return result
+                    return java.util.ArrayList(result)
                 else:
                     balance = ErgoAppKit.getBalance(result)
                     nergLeft = self._nergToSpend - balance["erg"]
