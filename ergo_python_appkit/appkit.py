@@ -315,8 +315,9 @@ class ErgoAppKit:
     @JImplements(java.util.function.Function)
     class SignTransactionWithNodeExecutor(object):
 
-        def __init__(self, unsignedTx: UnsignedTransactionImpl):
+        def __init__(self, unsignedTx: UnsignedTransactionImpl, api: WalletApi):
             self._unsignedTx = unsignedTx
+            self._api = api
 
         @JOverride
         def apply(self, ctx: BlockchainContextImpl) -> SignedTransaction:
@@ -333,8 +334,7 @@ class ErgoAppKit:
                 unsignedErgoTx.setDataInputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionDataInput())).to(unsignedErgoLikeTx.dataInputs()))
             unsignedErgoTx.setOutputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionOutput())).to(unsignedErgoLikeTx.outputs()))
             signRequest.setTx(unsignedErgoTx)
-            api = self._client.createService(WalletApi)
-            response = api.walletTransactionSign(signRequest).execute()
+            response = self._api.walletTransactionSign(signRequest).execute()
             if response.isSuccessful():
                 ergoTx = response.body()
                 tx = ScalaBridge.isoErgoTransaction().to(ergoTx)
@@ -345,7 +345,8 @@ class ErgoAppKit:
                 raise ErgoException(f'{error["reason"]}: {error["detail"]}')
 
     def signTransactionWithNode(self, unsignedTx: UnsignedTransactionImpl) -> SignedTransaction:
-        return self._ergoClient.execute(ErgoAppKit.SignTransactionWithNodeExecutor(unsignedTx))
+        api = self._client.createService(WalletApi)
+        return self._ergoClient.execute(ErgoAppKit.SignTransactionWithNodeExecutor(unsignedTx,api))
 
     @JImplements(java.util.function.Function)
     class GetUnspentBoxesExecutor(object):
