@@ -457,11 +457,18 @@ class ErgoAppKit:
 
     def boxesCovered(inputs: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> bool:
         balance = ErgoAppKit.getBalance(inputs)
+        changeRequired = False
         if balance["erg"] < nErgRequired:
+            return False
+        if balance["erg"] - nErgRequired > 0 and balance["erg"] - nErgRequired < int(1e6):
             return False
         for token in list(tokensToSpend.keys()):
             if balance.get(token,0) < tokensToSpend[token]:
                 return False
+            if balance.get(token,0) > tokensToSpend[token]:
+                changeRequired = True
+        if changeRequired:
+            return balance["erg"] > nErgRequired + int(1e6)
         return True
 
     def deserializeLongArray(hex: str) -> List[int]:
