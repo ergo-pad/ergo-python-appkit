@@ -114,7 +114,7 @@ class ErgoAppKit:
                     boxData = response.body()
                 if boxData is None:
                     raise ErgoClientException("Cannot load UTXO box " + id, None)
-                res.append(InputBoxImpl(ctx, boxData))
+                res.append(InputBoxImpl(boxData))
             return java.util.ArrayList(res)
 
     def getBoxesById(self, boxIds: List[str]) -> List[InputBox]:
