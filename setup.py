@@ -12,7 +12,7 @@ def glob_fix(package_name, glob):
 
 setuptools.setup(
     name='ergo_python_appkit',  
-    version='0.0.9',
+    version='0.1.0',
     packages=['ergo_python_appkit'] ,
     author="Robert Pieter van Leeuwen",
     author_email="luivatra@gmail.com",
