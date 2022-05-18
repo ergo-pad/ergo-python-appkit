@@ -467,6 +467,8 @@ class ErgoAppKit:
                 return False
             if balance.get(token,0) > tokensToSpend[token]:
                 changeRequired = True
+        if len(tokensToSpend.keys()) < len(balance.keys()) - 1:
+            changeRequired = True
         if changeRequired:
             return balance["erg"] > nErgRequired + int(1e6)
         return True
