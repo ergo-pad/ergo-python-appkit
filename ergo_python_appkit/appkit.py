@@ -18,7 +18,7 @@ except OSError:
 
 
 from org.ergoplatform import ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, Eip4Token, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.appkit import Address, Eip4Token, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction, SigmaProp, ErgoAuthUtils
 from org.ergoplatform.restapi.client import ApiClient, ErgoTransactionOutput, ErgoTransactionUnsignedInput, TransactionSigningRequest, UnsignedErgoTransaction, UtxoApi, WalletApi
 from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoTreeContract, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
@@ -52,7 +52,7 @@ class ErgoValueT(Enum):
 
 class ErgoAppKit:
     
-    def __init__(self,nodeUrl: str, networkType: str, explorerUrl: str, nodeApiKey: str = ""):
+    def __init__(self, nodeUrl: str, networkType: str, explorerUrl: str, nodeApiKey: str = ""):
         self._nodeUrl = nodeUrl
         self._networkType = ErgoAppKit.NetworkType(networkType)
         self._client: ApiClient = ApiClient(self._nodeUrl, "ApiKeyAuth", nodeApiKey)
@@ -497,8 +497,13 @@ class ErgoAppKit:
             tts.append(ErgoToken(entry,map[entry]))
         return tts
 
-        
+    def getSigmaBooleanFromAddress(address: str) -> str:
+        # we need a SigmaProp for ErgoAuth. Every address is a sigmaprop, so convert
+        addressSigmaProp = SigmaProp.createFromAddress(Address.create(address))
+        sigmaBoolean = base64.b64encode(addressSigmaProp.toBytes()).decode()
+        return sigmaBoolean
 
-    
-
-
+    def verifyErgoAuthSignedMessage(address: str, message: str, signedMessage: str, proof: str) -> bool:
+        addressSigmaProp = SigmaProp.createFromAddress(Address.create(address))
+        proofBytes = base64.b64decode(proof)
+        return ErgoAuthUtils.verifyResponse(addressSigmaProp, message, signedMessage, proofBytes)
