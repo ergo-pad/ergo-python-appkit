@@ -1,3 +1,4 @@
+import java.lang
 import java.math
 import java.util
 import org.bouncycastle.math.ec.custom.sec
@@ -15,7 +16,7 @@ class ErgoSignature:
 class ErgoUnsafeProver:
     def __init__(self): ...
     @typing.overload
-    def prove(self, unsignedErgoLikeTransaction: org.ergoplatform.UnsignedErgoLikeTransaction, map: typing.Union[java.util.Map[str, sigmastate.basics.DLogProtocol.DLogProverInput], typing.Mapping[str, sigmastate.basics.DLogProtocol.DLogProverInput]]) -> org.ergoplatform.ErgoLikeTransaction: ...
+    def prove(self, unsignedErgoLikeTransaction: org.ergoplatform.UnsignedErgoLikeTransaction, map: typing.Union[java.util.Map[typing.Union[java.lang.String, str], sigmastate.basics.DLogProtocol.DLogProverInput], typing.Mapping[typing.Union[java.lang.String, str], sigmastate.basics.DLogProtocol.DLogProverInput]]) -> org.ergoplatform.ErgoLikeTransaction: ...
     @typing.overload
     def prove(self, unsignedErgoLikeTransaction: org.ergoplatform.UnsignedErgoLikeTransaction, dLogProverInput: sigmastate.basics.DLogProtocol.DLogProverInput) -> org.ergoplatform.ErgoLikeTransaction: ...
 

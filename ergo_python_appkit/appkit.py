@@ -27,9 +27,10 @@ from java.lang.reflect import UndeclaredThrowableException
 from sigmastate.serialization import ErgoTreeSerializer
 from sigmastate.lang.exceptions import InterpreterException
 from retrofit2 import Response
-import java
+from java.util import ArrayList
 import scala
 from java.lang import NullPointerException
+from java.util.function import Function
 import base64
 
 
@@ -70,7 +71,7 @@ class ErgoAppKit:
     def tree2Address(self, ergoTree):
         return self._addrEnc.fromProposition(ergoTree).get().toString()
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class BuildOutBoxExecutor(object):
 
         def __init__(self, value: int, tokens: Dict[str,int], registers, contract):
@@ -97,7 +98,7 @@ class ErgoAppKit:
     def buildOutBox(self,value: int, tokens: Dict[str,int], registers, contract) -> OutBox:
         return self._ergoClient.execute(ErgoAppKit.BuildOutBoxExecutor(value,tokens,registers,contract))
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class GetBoxesByIdExecutor(object):
 
         def __init__(self, boxIds: List[str], api: UtxoApi):
@@ -115,13 +116,13 @@ class ErgoAppKit:
                 if boxData is None:
                     raise ErgoClientException("Cannot load UTXO box " + id, None)
                 res.append(InputBoxImpl(boxData))
-            return java.util.ArrayList(res)
+            return ArrayList(res)
 
     def getBoxesById(self, boxIds: List[str]) -> List[InputBox]:
         api = self._client.createService(UtxoApi)
         return list(self._ergoClient.execute(ErgoAppKit.GetBoxesByIdExecutor(boxIds,api)))
     
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class MintTokenExecutor(object):
 
         def __init__(self, value: int, tokenId: str, tokenName: str, tokenDesc: str, mintAmount: int, decimals: int, contract: ErgoContract):
@@ -144,7 +145,7 @@ class ErgoAppKit:
     def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract, withTxId: str = "ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d") -> InputBox:
         return self.buildOutBox(value, tokens, registers, contract).convertToInputWith(withTxId, 0)
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class BoxesToSpendFromListExecutor(object):
 
         def __init__(self,   addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}):
@@ -159,7 +160,7 @@ class ErgoAppKit:
             result = []
             for address in self._addresses:
                 try:
-                    coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergLeft,java.util.ArrayList(tts))
+                    coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergLeft,ArrayList(tts))
                 except NullPointerException as e:
                     err = ""
                     for stackTraceElement in e.getStackTrace():
@@ -168,7 +169,7 @@ class ErgoAppKit:
                     logging.info(err)
                 result = result + list(coveringBoxes.getBoxes())
                 if ErgoAppKit.boxesCovered(result,self._nergToSpend,self._tokensToSpend):
-                    return java.util.ArrayList(result)
+                    return ArrayList(result)
                 else:
                     balance = ErgoAppKit.getBalance(result)
                     nergLeft = self._nergToSpend - balance["erg"]
@@ -183,7 +184,7 @@ class ErgoAppKit:
     def boxesToSpendFromList(self, addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
         return list(self._ergoClient.execute(ErgoAppKit.BoxesToSpendFromListExecutor(addresses,nergToSpend,tokensToSpend)))
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class BoxesToSpendExecutor(object):
 
         def __init__(self,   address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}):
@@ -195,7 +196,7 @@ class ErgoAppKit:
         def apply(self, ctx: BlockchainContextImpl) -> List[InputBox]:
             tts = ErgoAppKit.mapToErgoTokenList(self._tokensToSpend)
             try:
-                coveringBoxes = ctx.getCoveringBoxesFor(Address.create(self._address),self._nergToSpend,java.util.ArrayList(tts))
+                coveringBoxes = ctx.getCoveringBoxesFor(Address.create(self._address),self._nergToSpend,ArrayList(tts))
             except NullPointerException as e:
                 err = ""
                 for stackTraceElement in e.getStackTrace():
@@ -239,7 +240,7 @@ class ErgoAppKit:
         treeSerializer = ErgoTreeSerializer()
         return self._addrEnc.fromProposition(treeSerializer.deserializeErgoTree(bytes)).get().script()
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class PreHeaderExecutor(object):
 
         def __init__(self,  timestamp: int = None):
@@ -255,7 +256,7 @@ class ErgoAppKit:
     def preHeader(self, timestamp: int = None) -> PreHeader:
         return self._ergoClient.execute(ErgoAppKit.PreHeaderExecutor(timestamp))
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class BuildUnsignedTransactionExecutor(object):
 
         def __init__(self,  inputs: List[InputBox], outputs: List[OutBox], fee: int, sendChangeTo: ErgoAddress, tokensToBurn: Dict[str,int] = None, dataInputs: List[InputBox] = None, preHeader: PreHeader = None):
@@ -273,16 +274,16 @@ class ErgoAppKit:
             if self._preHeader is not None:
                 tb = tb.preHeader(self._preHeader)
             if self._dataInputs is not None:
-                tb = tb.withDataInputs(java.util.ArrayList(self._dataInputs))
+                tb = tb.withDataInputs(ArrayList(self._dataInputs))
             if self._tokensToBurn is not None:
                 tb = tb.tokensToBurn(ErgoAppKit.mapToErgoTokenList(self._tokensToBurn))
-            tb = tb.boxesToSpend(java.util.ArrayList(self._inputs)).fee(self._fee).outputs(self._outputs).sendChangeTo(self._sendChangeTo)
+            tb = tb.boxesToSpend(ArrayList(self._inputs)).fee(self._fee).outputs(self._outputs).sendChangeTo(self._sendChangeTo)
             return tb.build()
 
     def buildUnsignedTransaction(self, inputs: List[InputBox], outputs: List[OutBox], fee: int, sendChangeTo: ErgoAddress, tokensToBurn: Dict[str,int] = None, dataInputs: List[InputBox] = None, preHeader: PreHeader = None) -> UnsignedTransaction:
         return self._ergoClient.execute(ErgoAppKit.BuildUnsignedTransactionExecutor(inputs,outputs,fee,sendChangeTo,tokensToBurn,dataInputs,preHeader))
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class SignTransactionExecutor(object):
 
         def __init__(self, unsignedTx: UnsignedTransaction):
@@ -299,7 +300,7 @@ class ErgoAppKit:
         except UndeclaredThrowableException as e:
             raise e.getCause()
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class SendTransactionExecutor(object):
 
         def __init__(self, signedTx: SignedTransaction):
@@ -312,7 +313,7 @@ class ErgoAppKit:
     def sendTransaction(self, signedTx: SignedTransaction) -> str:
         return self._ergoClient.execute(ErgoAppKit.SendTransactionExecutor(signedTx))
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class SignTransactionWithNodeExecutor(object):
 
         def __init__(self, unsignedTx: UnsignedTransactionImpl, api: WalletApi):
@@ -348,7 +349,7 @@ class ErgoAppKit:
         api = self._client.createService(WalletApi)
         return self._ergoClient.execute(ErgoAppKit.SignTransactionWithNodeExecutor(unsignedTx,api))
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class GetUnspentBoxesExecutor(object):
 
         def __init__(self, address: str):
@@ -365,12 +366,12 @@ class ErgoAppKit:
                 result = result + list(pageResult)
                 offset += limit
                 pageResult = ctx.getUnspentBoxesFor(addr,offset,limit)
-            return java.util.ArrayList(result)
+            return ArrayList(result)
 
     def getUnspentBoxes(self, address: str) -> List[InputBox]:
         return list(self._ergoClient.execute(ErgoAppKit.GetUnspentBoxesExecutor(address)))
 
-    @JImplements(java.util.function.Function)
+    @JImplements(Function)
     class ReducedTxExecutor(object):
 
         def __init__(self, unsignedTx: UnsignedTransactionImpl):
