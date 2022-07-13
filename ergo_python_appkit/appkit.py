@@ -18,7 +18,7 @@ except OSError:
 
 
 from org.ergoplatform import ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, Eip4Token, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction, SigmaProp, ErgoAuthUtils
+from org.ergoplatform.appkit import Address, BoxOperations, Eip4Token, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, ExplorerAndPoolUnspentBoxesLoader, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction, SigmaProp, ErgoAuthUtils
 from org.ergoplatform.restapi.client import ApiClient, ErgoTransactionOutput, ErgoTransactionUnsignedInput, TransactionSigningRequest, UnsignedErgoTransaction, UtxoApi, WalletApi
 from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoTreeContract, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
@@ -148,68 +148,30 @@ class ErgoAppKit:
     @JImplements(Function)
     class BoxesToSpendFromListExecutor(object):
 
-        def __init__(self,   addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}):
+        def __init__(self,   addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}, includeMempool: bool = True):
             self._addresses = addresses
             self._nergToSpend = nergToSpend
             self._tokensToSpend = tokensToSpend
+            self._includeMempool = includeMempool
 
         @JOverride
         def apply(self, ctx: BlockchainContextImpl) -> List[InputBox]:
-            tts = ErgoAppKit.mapToErgoTokenList(self._tokensToSpend)
+            tts = ArrayList(ErgoAppKit.mapToErgoTokenList(self._tokensToSpend))
             nergLeft = self._nergToSpend
-            result = []
-            for address in self._addresses:
-                try:
-                    coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergLeft,ArrayList(tts))
-                except NullPointerException as e:
-                    err = ""
-                    for stackTraceElement in e.getStackTrace():
-                        err = '\n'.join([err,stackTraceElement.toString()])
-                    err = '\n'.join([err,str(e.getMessage())])
-                    logging.info(err)
-                result = result + list(coveringBoxes.getBoxes())
-                if ErgoAppKit.boxesCovered(result,self._nergToSpend,self._tokensToSpend):
-                    return ArrayList(result)
-                else:
-                    balance = ErgoAppKit.getBalance(result)
-                    nergLeft = self._nergToSpend - balance["erg"]
-                    tokensLeft = {}         
-                    for token in list(self._tokensToSpend.keys()):
-                        if balance.get(token,0) < self._tokensToSpend[token]:
-                            tokensLeft[token] = self._tokensToSpend[token] - balance.get(token,0)
-                    tts = ErgoAppKit.mapToErgoTokenList(tokensLeft)
-
-            return None
-
-    def boxesToSpendFromList(self, addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
-        return list(self._ergoClient.execute(ErgoAppKit.BoxesToSpendFromListExecutor(addresses,nergToSpend,tokensToSpend)))
-
-    @JImplements(Function)
-    class BoxesToSpendExecutor(object):
-
-        def __init__(self,   address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}):
-            self._address = address
-            self._nergToSpend = nergToSpend
-            self._tokensToSpend = tokensToSpend
-
-        @JOverride
-        def apply(self, ctx: BlockchainContextImpl) -> List[InputBox]:
-            tts = ErgoAppKit.mapToErgoTokenList(self._tokensToSpend)
-            try:
-                coveringBoxes = ctx.getCoveringBoxesFor(Address.create(self._address),self._nergToSpend,ArrayList(tts))
-            except NullPointerException as e:
-                err = ""
-                for stackTraceElement in e.getStackTrace():
-                    err = '\n'.join([err,stackTraceElement.toString()])
-                err = '\n'.join([err,str(e.getMessage())])
-                logging.info(err)
-            if ErgoAppKit.boxesCovered(coveringBoxes.getBoxes(),self._nergToSpend,self._tokensToSpend):
-                return coveringBoxes.getBoxes()
+            addresses = []
+            for addr in self._addresses:
+                addresses.append(Address.create(addr))
+            result = BoxOperations.createForSenders(ArrayList(addresses),ctx).withTokensToSpend(tts).withAmountToSpend(nergLeft).withInputBoxesLoader(ExplorerAndPoolUnspentBoxesLoader().withAllowChainedTx(self._includeMempool)).loadTop()
+            if ErgoAppKit.boxesCovered(result,self._nergToSpend,self._tokensToSpend):
+                return ArrayList(result)
             else:
                 return None
 
-    def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
-        return list(self._ergoClient.execute(ErgoAppKit.BoxesToSpendExecutor(address,nergToSpend,tokensToSpend)))
+    def boxesToSpendFromList(self, addresses: list[str], nergToSpend: int, tokensToSpend: Dict[str,int] = {}, includeMempool: bool = True) -> List[InputBox]:
+        return list(self._ergoClient.execute(ErgoAppKit.BoxesToSpendFromListExecutor(addresses,nergToSpend,tokensToSpend,includeMempool)))
+
+    def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}, includeMempool: bool = True) -> List[InputBox]:
+        return list(self._ergoClient.execute(ErgoAppKit.BoxesToSpendFromListExecutor([address],nergToSpend,tokensToSpend,includeMempool)))
 
     def ergoValue(value, t: ErgoValueT):
         if t == ErgoValueT.Long:
