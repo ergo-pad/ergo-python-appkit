@@ -9,6 +9,7 @@ from jpype import JImplements, JOverride
 from enum import Enum
 from typing import Dict, List, TypeVar
 
+
 try:
     jpype.addClassPath('../jars/*')
     jpype.addClassPath('./jars/*')
@@ -33,6 +34,7 @@ from java.lang import NullPointerException
 from java.util.function import Function
 import base64
 
+getblok_plasma = jpype.JPackage("io.getblok.getblok_plasma")
 
 #region LOGGING
 import logging

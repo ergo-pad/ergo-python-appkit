@@ -8,7 +8,10 @@ import scala
 import scorex
 import sigmastate
 import special
+import getblok_plasma
 
+@typing.overload
+def JPackage(__package_name: typing.Literal['io.getblok.getblok_plasma']) -> getblok_plasma.__module_protocol__: ...
 
 @typing.overload
 def JPackage(__package_name: typing.Literal['java']) -> java.__module_protocol__: ...
