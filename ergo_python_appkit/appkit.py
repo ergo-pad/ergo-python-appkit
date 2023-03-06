@@ -178,7 +178,7 @@ class ErgoAppKit:
             res = ErgoValue.of(JLong(value))
             return res
         if t == ErgoValueT.ByteArrayFromHex:
-            return ErgoValue.of(bytes.fromhex(value))
+            return ErgoValue.of(bytes.fromhex(value), ErgoType.byteType())
         if t == ErgoValueT.LongArray:
             collVal = []
             for l in value:
@@ -186,7 +186,7 @@ class ErgoAppKit:
             res = ErgoValue.of(collVal,ErgoType.longType())
             return res
         if t == ErgoValueT.ByteArray:
-            res = ErgoValue.of(value)
+            res = ErgoValue.of(value, ErgoType.byteType())
             return res
 
     def dummyContract(self) -> ErgoContract:
